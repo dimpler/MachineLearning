@@ -1,0 +1,136 @@
+# Machine Learning class, August 2014
+## Cleaning Data for course project
+
+Reading data into R. Training data were sourced from [here](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv) and the testing data is available [here](https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+```{r}
+train <- read.csv("pml-training.csv", header=TRUE)
+test <- read.csv("pml-testing.csv", header=TRUE)
+```
+
+Since the (training) dataset is a bit large at `r dim(train)[2]` columns, it would be a good idea to check if there are any columns in the dataset that consist of only NA values, so that they can be removed.  That way we can focus only just the variables that actually have values associated with them.  In fact, it would be good to eliminate as many useless columns as possible, in order to give the learning algorithms only the variables that might be useful, and none extra.
+
+```{r}
+## Finds number of NA values in each column
+numOfNAs <- 1:dim(train)[2]
+for(i in 1:dim(train)[2]){
+  numOfNAs[i] <- sum(is.na(train[,i]))
+}
+
+## Print out the results
+table(numOfNAs)
+```
+
+93 columns appear to be full of data without any missing values.  However, there are 67 columns that appear to be `r round(as.numeric(names(table(numOfNAs))[2])/dim(train)[1], 3)*100`% full of NA values, and we will go ahead and leave those out of our prediction.  I believe that any benefit they could serve would be overshadowed by the complexity of working with a larger dataset as well as dealing with a vast number of NA values. 
+
+```{r}
+## Subset to exclude the columns that primarily consist of NA values, and do this for test as well
+train <- train[,numOfNAs==0]
+test <- test[,numOfNAs==0]
+```
+
+Next, there are also some date variables that will not aid in determining which variables are able to predict movements.  Also, the first column called "X" is just the row number, and that should be ignored as well.
+
+```{r}
+## Display the first few column classes
+str(train[,1:8])
+
+## Remove the date columns and "X" column
+train <- train[,-c(1, 3, 4, 5)]
+test <- test[,-c(1, 3, 4, 5)]
+```
+
+Next, for uniformity, the columns of class integer will be converted to numeric.
+
+```{r}
+## Creates a logical vector telling which columns are of the class "integer"
+colIsInt <- sapply(train, class)=="integer"
+## Goes along the integer columns and makes them numeric
+train[,colIsInt] <- lapply(train[,colIsInt],as.numeric)
+test[,colIsInt] <- lapply(test[,colIsInt],as.numeric)
+```
+
+The two types of classes left are just factor and numeric!
+
+```{r}
+## Displays the number of columns with the class "factor" and "numeric"
+table(sapply(train,class))
+```
+
+The next thing that is noticed is that some columns which are of the "factor" class should probably be "numeric" as well.  It appears that a "DIV/0!" error in the data has led to R reading those in as a "factor" variable.  Let's look at a table of values for one of the "factor" columns to get an idea of how many "#DIV/0!" values we might have.
+
+```{r}
+table(train$min_yaw_belt)
+```
+
+We see that there are 10 values of "#DIV/0!"", but alarmingly there are over 19,000 values of "", blank entries!  Let's look across each of the columns and see how many blank entries there are.
+
+```{r}
+## Finds number of "" values in each column
+numOfBlanks <- 1:dim(train)[2]
+for(i in 1:dim(train)[2]){
+  numOfBlanks[i] <- sum("" == train[,i])
+}
+
+## Print out the results
+numOfBlanks
+```
+
+Well well well, looks like we will be getting rid of more columns in a moment, that are extremely high levels of blanks in these columns.  Before we start removing columns, let's find out which ones they are, though I have a hunch that they are the factor columns...
+
+```{r}
+colClass <- sapply(train,class)
+quickcheck <- data.frame(numOfBlanks,colClass)
+quickcheck
+```
+
+All that is needed is a quick check of this dataframe printed above and we see that the middle group of "factor" columns are the columns that are full of blanks.  Let's get rid of those, and we will make sure to keep the first two columns and the last one, which are "factor" columns too, but necessary ones.
+
+```{r}
+## We use just the 3rd to the 35th value because the 1st, 2nd, and 36th are ones we want to keep
+colIsBadFactor <- grep("factor",colClass)[3:35]
+
+## Subsetting out the "factor" columns that are full of blanks
+train <- train[,-colIsBadFactor]
+test <- test[,-colIsBadFactor]
+```
+
+Now we are down to `r dim(train)[2]` columns, and one of those is the variable we will be predicting, so really it is one less than that.  Next, a quick look at the first 3 columns that remain.
+
+
+```{r}
+## Names of the first 3 columns
+names(train[,1:3])
+
+## What's in these columns
+table(train$user_name)
+table(train$new_window)
+table(train$num_window[1:500])
+```
+
+These columns can be removed too.  The added benefit is that all the predictors will be of the "numeric" class.
+
+```{r}
+train <- train[,-c(1:3)]
+test <- test[,-c(1:3)]
+```
+
+The last thing is to save our dataframes:
+
+```{r}
+save(train, file="traincleaned.Rda")
+save(test, file="testcleaned.Rda")
+```
+
+We are down to `r dim(train)[2]` columns.
+
+```{r echo=FALSE, include=FALSE}
+## Remove unneeded data
+rm(quickcheck)
+rm(colClass)
+rm(colIsBadFactor)
+rm(colIsInt)
+rm(i)
+rm(numOfBlanks)
+rm(numOfNAs)
+```
